@@ -31,7 +31,7 @@ for t in range(T):
     hora = t%24
     demanda_neta[t]   = int(ppeak*gamma[t]*perfil_diario[hora]*(1+epsilon[t]))
     precio_importe[t] = int((100000+90000*perfil_diario[hora])*(1+eta[t]))
-    reserva[t] = demanda_neta[t]*0.1
+    reserva[t] = int(demanda_neta[t]*0.1)
 # ...Y volvieron evaluados :)
 
 #   Diccionarios, la forma "bonita"
