@@ -73,6 +73,12 @@ monto_multa = 10000000  # supongo que todo lo monetario está en clp....
 
 dias = range(7)
 
+BIG_M_Umbral = sum(
+    24 * Pmax[g] * factor_emision[g]
+    for g in generadores
+) # para no poner un numero Arbitrariamente alto, se pone el valor que produciria 
+  # encender todos los generadores al maximo, siendo el techo absoluto de lo lograble
+
 #   Solver de programacion lineal
 #   De acá en más se usan los nombres de la guia
 
@@ -236,7 +242,7 @@ def emision_dia(modelo, d):
     )
 
 def limite_co2(modelo, d):
-    return modelo.E[d] <= modelo.E_day[d] + BIG_M * modelo.M[d]
+    return modelo.E[d] <= modelo.E_day + BIG_M_Umbral * modelo.M[d]
 
 
 ### Ahora si pasan a ser restricciones aplicadas
@@ -276,6 +282,17 @@ modelo.incremento_inf = pyo.Constraint(
     modelo.G,
     modelo.T,
     rule=incremento_inf
+)
+
+
+modelo.emision_dia = pyo.Constraint(
+    modelo.D,
+    rule=emision_dia
+)
+
+modelo.limite_co2 = pyo.Constraint(
+    modelo.D,
+    rule=limite_co2
 )
 
 ##  Pedirle porfavor al PC que lo resuelva :)
