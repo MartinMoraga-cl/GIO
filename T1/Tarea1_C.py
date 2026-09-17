@@ -33,7 +33,7 @@ for t in range(T):
     hora = t%24
     demanda_neta[t]   = int(ppeak*gamma[t]*perfil_diario[hora]*(1+epsilon[t]))
     precio_importe[t] = int((100000+90000*perfil_diario[hora])*(1+eta[t]))
-    reserva[t] = demanda_neta[t]*0.1
+    reserva[t] = int(demanda_neta[t]*0.1)
 # ...Y volvieron evaluados :)
 
 #   Diccionarios, la forma "bonita"
@@ -64,6 +64,15 @@ U0 = {
     "Gas_Base_1": 1,"Gas_Base_2": 1, "Diesel_Med_1": 0, "Diesel_Med_2": 0, "Peaker": 0    
 }
 
+factor_emision = { # tCO2/MWh
+    "Gas_Base_1": 0.35,"Gas_Base_2": 0.38, "Diesel_Med_1": 0.65, "Diesel_Med_2": 0.68, "Peaker": 0.75    
+}
+
+umbral_diario = 1500 # tCO2/diarias
+monto_multa = 10000000  # supongo que todo lo monetario está en clp....
+
+dias = range(7)
+
 #   Solver de programacion lineal
 #   De acá en más se usan los nombres de la guia
 
@@ -72,6 +81,7 @@ modelo = pyo.ConcreteModel()
 ##  Los conjuntos [ pyo.Set() ]
 modelo.G = pyo.Set(initialize=generadores)
 modelo.T = pyo.Set(initialize=horas)
+modelo.D = pyo.Set(initialize=dias)
 
 ##  Parametros
 modelo.Pmin = pyo.Param(
@@ -120,6 +130,19 @@ modelo.U0 = pyo.Param( # el estado inicial como parametro
     initialize=U0
 )
 
+modelo.E_day = pyo.Param( # limite diario
+    initialize=umbral_diario
+)
+modelo.F = pyo.Param( # coste fijo por exceso de Emisiones
+    initialize=monto_multa
+)
+modelo.e_g = pyo.Param( # produccion de tCO2 por cada MWh generados por g
+    modelo.G,
+    initialize=factor_emision
+)
+
+
+
 ##  Las Variables
 modelo.X = pyo.Var( # Potencia generada por g en t
     modelo.G,
@@ -140,6 +163,15 @@ modelo.Z = pyo.Var( # Potencia Comprada
     modelo.T,
     domain=pyo.NonNegativeReals
 )
+# modificacion es 
+modelo.E = pyo.Var( # Emisiones del complejo por cada dia
+    modelo.D,
+    domain=pyo.NonNegativeReals
+)
+modelo.M = pyo.Var( # 1 si el complejo es Multado; 0 en caso contrario; por cada DIA
+    modelo.D,
+    domain=pyo.Binary
+)
 
 ##  Funcion Objetivo
 
@@ -151,6 +183,9 @@ def objetivo(modelo):
     )+sum(
         modelo.precio_imp[t] * modelo.Z[t]
         for t in modelo.T
+    )+sum(
+        modelo.M[d]* modelo.F
+        for d in modelo.D
     )
 
 modelo.obj = pyo.Objective(
@@ -190,6 +225,19 @@ def incremento_inf(modelo, g, t):
     if t == 0:
         return -modelo.R[g] <= modelo.X[g, t] - modelo.X0[g]
     return -modelo.R[g] <= modelo.X[g, t] - modelo.X[g, t-1]
+
+
+
+def emision_dia(modelo, d):
+    return modelo.E[d] == sum(
+        modelo.X[g, d*24 + h] * modelo.e_g
+        for g in modelo.G
+        for h in range(24)
+    )
+
+def limite_co2(modelo, d):
+    return modelo.E[d] <= modelo.E_day[d] + BIG_M * modelo.M[d]
+
 
 ### Ahora si pasan a ser restricciones aplicadas
 modelo.pmin = pyo.Constraint(
