@@ -69,7 +69,7 @@ factor_emision = { # tCO2/MWh
 }
 
 umbral_diario = 1500 # tCO2/diarias
-monto_multa = 10000000  # supongo que todo lo monetario está en clp....
+monto_multa = 100000000  # supongo que todo lo monetario está en clp....
 
 dias = range(7)
 
@@ -308,7 +308,7 @@ print("Objetivo =", pyo.value(modelo.obj))
 
 
 print("Hora | Demanda | Gas_B1(X,U) | Gas_B2(X,U) | Diesel_Med_1 | Diesel_Med_2 | Peaker(X,U) | Importe (Z)")
-print("-" * 75)
+print("-" * 110)
 
 for t in modelo.T:
     print(
@@ -323,12 +323,64 @@ for t in modelo.T:
     )
 
 
+# ============================================================
+# Resumen de emisiones
+# ============================================================
+
+emisiones = [
+    pyo.value(modelo.E[d])
+    for d in modelo.D
+]
+
+umbral = pyo.value(modelo.E_day)
+
+multas = [
+    pyo.value(modelo.M[d])
+    for d in modelo.D
+]
+
+# Se usa M, no E > umbral, para evitar errores de precision numerica
+dias_sobre_umbral = sum(
+    1 for d in modelo.D
+    if multas[d] > 0.5
+)
+
+costo_multas = sum(
+    multas[d] * monto_multa
+    for d in modelo.D
+)
+
+print("\n")
+print("EMISIONES DIARIAS")
+print("-" * 72)
+print("Día | Emisiones [tCO2] | Umbral [tCO2] | Exceso [tCO2] | Multa")
+print("-" * 72)
+
+for d in modelo.D:
+
+    E = emisiones[d]
+    exceso = max(0, E - umbral)
+    multa = multas[d]
+
+    print(
+        f"{d+1:3} | "
+        f"{E:16.2f} | "
+        f"{umbral:13.2f} | "
+        f"{exceso:13.2f} | "
+        f"{multa:5.0f}"
+    )
+
+print("-" * 72)
+print(f"Días con multa:       {dias_sobre_umbral}")
+print(f"Costo total multas:   ${costo_multas:,.0f}")
 
 
-
-## Graficos, graciass Chati
+# ============================================================
+# Graficos
+# ============================================================
 
 import matplotlib.pyplot as plt
+
 
 # ============================================================
 # 1. Despacho de generación
@@ -352,7 +404,8 @@ plt.plot(
 plt.plot(
     horas,
     [pyo.value(modelo.demanda[t]) for t in modelo.T],
-    label="Demanda"
+    label="Demanda",
+    linewidth=2
 )
 
 capacidad_operativa = [
@@ -366,6 +419,7 @@ capacidad_operativa = [
 plt.plot(
     horas,
     capacidad_operativa,
+    linestyle="--",
     label="Capacidad operativa"
 )
 
@@ -382,6 +436,7 @@ reserva_efectiva = [
 plt.plot(
     horas,
     reserva_efectiva,
+    linestyle=":",
     label="Reserva efectiva"
 )
 
@@ -396,128 +451,56 @@ plt.show()
 
 
 # ============================================================
-# 2. Emisiones diarias y umbral
+# 2. Emisiones diarias
 # ============================================================
 
-emisiones = [
-    pyo.value(modelo.E[d])
-    for d in modelo.D
-]
-
-umbral = pyo.value(modelo.E_day)
-
-multas = [
-    pyo.value(modelo.M[d])
-    for d in modelo.D
-]
-
-dias_sobre_umbral = sum(
-    1 for d in modelo.D
-    if emisiones[d] > umbral
-)
+dias_grafico = range(1, 8)
 
 plt.figure(figsize=(12, 6))
 
-plt.plot(
-    range(1, 8),
+# Emisiones como barras
+plt.bar(
+    dias_grafico,
     emisiones,
-    marker="o",
     label="Emisiones diarias"
 )
 
+# Umbral como línea horizontal
 plt.axhline(
     y=umbral,
     linestyle="--",
+    linewidth=2,
     label=f"Umbral = {umbral:.0f} tCO2/día"
 )
 
-# Marcar días en que se aplica la multa
-for d in modelo.D:
-    if multas[d] > 0.5:
-        plt.scatter(
-            d + 1,
-            emisiones[d],
-            s=100,
-            label="Día multado" if d == 0 else None
-        )
+# Marcar solamente los días multados
+dias_multados = [
+    d + 1
+    for d in modelo.D
+    if multas[d] > 0.5
+]
 
-plt.xticks(range(1, 8))
+emisiones_multadas = [
+    emisiones[d - 1]
+    for d in dias_multados
+]
+
+if dias_multados:
+    plt.scatter(
+        dias_multados,
+        emisiones_multadas,
+        s=90,
+        marker="x",
+        linewidths=3,
+        label="Día con multa"
+    )
+
+plt.xticks(dias_grafico)
 plt.xlabel("Día")
 plt.ylabel("Emisiones [tCO2]")
-plt.title(
-    f"Emisiones diarias - F = ${monto_multa:,.0f} "
-    f"- Días sobre umbral: {dias_sobre_umbral}"
-)
+plt.title("Emisiones diarias y límite de emisiones")
+plt.grid(axis="y", linestyle=":")
 
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-
-plt.show()
-
-
-# ============================================================
-# 3. Resumen numérico de emisiones
-# ============================================================
-
-print("\nEmisiones diarias")
-print("-" * 65)
-print("Día | Emisiones [tCO2] | Umbral [tCO2] | Exceso | Multa")
-print("-" * 65)
-
-for d in modelo.D:
-
-    E = emisiones[d]
-    exceso = max(0, E - umbral)
-    multa = multas[d]
-
-    print(
-        f"{d+1:3} | "
-        f"{E:16.2f} | "
-        f"{umbral:13.2f} | "
-        f"{exceso:6.2f} | "
-        f"{multa:5.0f}"
-    )
-
-print("-" * 65)
-print(f"Días sobre el umbral: {dias_sobre_umbral}")
-print(f"Costo total de multas: ${dias_sobre_umbral * monto_multa:,.0f}")
-# Capacidad instalada operativa
-capacidad_operativa = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        for g in modelo.G
-    )
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    capacidad_operativa,
-    label="Capacidad operativa"
-)
-
-# Reserva operativa efectiva
-reserva_efectiva = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        - pyo.value(modelo.X[g, t])
-        for g in modelo.G
-    )
-    + (max_importe - pyo.value(modelo.Z[t]))
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    reserva_efectiva,
-    label="Reserva efectiva"
-)
-
-plt.xlabel("Hora")
-plt.ylabel("Potencia [MW]")
-plt.title("Despacho de generación durante la semana")
-plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
