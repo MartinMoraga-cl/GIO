@@ -1,0 +1,4 @@
+Estado: optimal
+Objetivo: 2255776353.642857
+Días sobre el umbral: 1
+Multas totales: 100000000.0

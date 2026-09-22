@@ -1,0 +1,2 @@
+Estado: optimal
+Objetivo: 1772517897.0

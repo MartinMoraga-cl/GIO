@@ -1,0 +1,4 @@
+Estado: optimal
+Objetivo: 1726822607.6523497
+SOC inicial (MWh): 100
+SOC final (MWh): 100.0
