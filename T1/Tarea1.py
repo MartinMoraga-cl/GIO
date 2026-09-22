@@ -4,7 +4,7 @@ import math
 
 T = 168 # Periodos, en hrs, asique solo una semanda
 horas = range(T) # genera el listados de 0 a 167
-SEMILLA = 69
+SEMILLA = 480
 RNG = np.random.default_rng(SEMILLA) # raro el python es.... esto es como intanciar un generador de rng....
 
 perfil_diario = [   # estos corchetes son una lista... los otros son Diccionarios
