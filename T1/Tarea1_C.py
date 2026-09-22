@@ -303,207 +303,136 @@ solver = pyo.SolverFactory("appsi_highs")
 resultado = solver.solve(modelo)
 
 print("Estado:", resultado.solver.termination_condition)
-#print("X =", pyo.value(modelo.X))
-#print("Y =", pyo.value(modelo.Y))
-#print("Z =", pyo.value(modelo.Z))
 print("Objetivo =", pyo.value(modelo.obj))
 
+# Guardar resultados, gracias Chati!
 
-print("Hora | Demanda | Gas_B1(X,U) | Gas_B2(X,U) | Diesel_Med_1 | Diesel_Med_2 | Peaker(X,U) | Importe (Z)")
-print("-" * 110)
+import csv
+import os
 
-for t in modelo.T:
-    print(
-        f"{t:4} | "
-        f"{pyo.value(modelo.demanda[t]):7.1f} | "
-        f"{pyo.value(modelo.X['Gas_Base_1',t]):6.0f},{pyo.value(modelo.U['Gas_Base_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Gas_Base_2',t]):6.0f},{pyo.value(modelo.U['Gas_Base_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_1',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_2',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Peaker',t]):6.0f},{pyo.value(modelo.U['Peaker',t]):3.0f} | "
-        f"{pyo.value(modelo.Z[t]):11.1f}"
-    )
+CARPETA_RESULTADOS = "resultados_variacion_c"
+os.makedirs(CARPETA_RESULTADOS, exist_ok=True)
+
+# Despacho horario
+
+archivo_despacho = os.path.join(CARPETA_RESULTADOS, "despacho.csv")
+
+with open(archivo_despacho, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+
+    writer.writerow([
+        "hora",
+        "dia",
+        "hora_dia",
+        "demanda_mw",
+
+        "Gas_Base_1_mw",
+        "Gas_Base_2_mw",
+        "Diesel_Med_1_mw",
+        "Diesel_Med_2_mw",
+        "Peaker_mw",
+
+        "importacion_mw",
+        "capacidad_operativa_mw",
+        "reserva_efectiva_mw",
+        "reserva_requerida_mw",
+
+        "Gas_Base_1_u",
+        "Gas_Base_2_u",
+        "Diesel_Med_1_u",
+        "Diesel_Med_2_u",
+        "Peaker_u"
+    ])
+
+    for t in modelo.T:
+        capacidad_operativa = sum(
+            pyo.value(modelo.U[g, t]) * Pmax[g]
+            for g in generadores
+        )
+
+        reserva_efectiva = (
+            capacidad_operativa
+            - sum(pyo.value(modelo.X[g, t]) for g in generadores)
+            + (max_importe - pyo.value(modelo.Z[t]))
+        )
+
+        writer.writerow([
+            t,
+            t // 24 + 1,
+            t % 24,
+
+            pyo.value(modelo.demanda[t]),
+
+            pyo.value(modelo.X["Gas_Base_1", t]),
+            pyo.value(modelo.X["Gas_Base_2", t]),
+            pyo.value(modelo.X["Diesel_Med_1", t]),
+            pyo.value(modelo.X["Diesel_Med_2", t]),
+            pyo.value(modelo.X["Peaker", t]),
+
+            pyo.value(modelo.Z[t]),
+            capacidad_operativa,
+            reserva_efectiva,
+            pyo.value(modelo.reserva[t]),
+
+            pyo.value(modelo.U["Gas_Base_1", t]),
+            pyo.value(modelo.U["Gas_Base_2", t]),
+            pyo.value(modelo.U["Diesel_Med_1", t]),
+            pyo.value(modelo.U["Diesel_Med_2", t]),
+            pyo.value(modelo.U["Peaker", t])
+        ])
 
 
-# ============================================================
-# Resumen de emisiones
-# ============================================================
+# Emisiones diarias
 
-emisiones = [
-    pyo.value(modelo.E[d])
-    for d in modelo.D
-]
+archivo_emisiones = os.path.join(
+    CARPETA_RESULTADOS,
+    "emisiones_diarias.csv"
+)
 
-umbral = pyo.value(modelo.E_day)
+with open(archivo_emisiones, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
 
-multas = [
-    pyo.value(modelo.M[d])
-    for d in modelo.D
-]
+    writer.writerow([
+        "dia",
+        "emisiones_tco2",
+        "umbral_tco2",
+        "exceso_tco2",
+        "multa"
+    ])
 
-# Se usa M, no E > umbral, para evitar errores de precision numerica
+    for d in modelo.D:
+        emisiones = pyo.value(modelo.E[d])
+        exceso = max(0, emisiones - umbral_diario)
+        multa = pyo.value(modelo.M[d]) * monto_multa
+
+        writer.writerow([
+            d + 1,
+            emisiones,
+            umbral_diario,
+            exceso,
+            multa
+        ])
+
+# Resumen
+
+archivo_resumen = os.path.join(CARPETA_RESULTADOS, "resumen.txt")
+
 dias_sobre_umbral = sum(
-    1 for d in modelo.D
-    if multas[d] > 0.5
+    1
+    for d in modelo.D
+    if pyo.value(modelo.E[d]) > umbral_diario
 )
 
-costo_multas = sum(
-    multas[d] * monto_multa
+multas_totales = sum(
+    pyo.value(modelo.M[d]) * monto_multa
     for d in modelo.D
 )
 
-print("\n")
-print("EMISIONES DIARIAS")
-print("-" * 72)
-print("Día | Emisiones [tCO2] | Umbral [tCO2] | Exceso [tCO2] | Multa")
-print("-" * 72)
+with open(archivo_resumen, "w", encoding="utf-8") as f:
+    f.write(f"Estado: {resultado.solver.termination_condition}\n")
+    f.write(f"Objetivo: {pyo.value(modelo.obj)}\n")
+    f.write(f"Días sobre el umbral: {dias_sobre_umbral}\n")
+    f.write(f"Multas totales: {multas_totales}\n")
 
-for d in modelo.D:
+print(f"Resultados guardados en: {CARPETA_RESULTADOS}/")
 
-    E = emisiones[d]
-    exceso = max(0, E - umbral)
-    multa = multas[d]
-
-    print(
-        f"{d+1:3} | "
-        f"{E:16.2f} | "
-        f"{umbral:13.2f} | "
-        f"{exceso:13.2f} | "
-        f"{multa:5.0f}"
-    )
-
-print("-" * 72)
-print(f"Días con multa:       {dias_sobre_umbral}")
-print(f"Costo total multas:   ${costo_multas:,.0f}")
-
-
-# ============================================================
-# Graficos
-# ============================================================
-
-import matplotlib.pyplot as plt
-
-
-# ============================================================
-# 1. Despacho de generación
-# ============================================================
-
-plt.figure(figsize=(14, 7))
-
-for g in modelo.G:
-    plt.plot(
-        horas,
-        [pyo.value(modelo.X[g, t]) for t in modelo.T],
-        label=g
-    )
-
-plt.plot(
-    horas,
-    [pyo.value(modelo.Z[t]) for t in modelo.T],
-    label="Importación"
-)
-
-plt.plot(
-    horas,
-    [pyo.value(modelo.demanda[t]) for t in modelo.T],
-    label="Demanda",
-    linewidth=2
-)
-
-capacidad_operativa = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        for g in modelo.G
-    )
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    capacidad_operativa,
-    linestyle="--",
-    label="Capacidad operativa"
-)
-
-reserva_efectiva = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        - pyo.value(modelo.X[g, t])
-        for g in modelo.G
-    )
-    + (max_importe - pyo.value(modelo.Z[t]))
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    reserva_efectiva,
-    linestyle=":",
-    label="Reserva efectiva"
-)
-
-plt.xlabel("Hora")
-plt.ylabel("Potencia [MW]")
-plt.title("Despacho de generación durante la semana")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-
-plt.show()
-
-
-# ============================================================
-# 2. Emisiones diarias
-# ============================================================
-
-dias_grafico = range(1, 8)
-
-plt.figure(figsize=(12, 6))
-
-# Emisiones como barras
-plt.bar(
-    dias_grafico,
-    emisiones,
-    label="Emisiones diarias"
-)
-
-# Umbral como línea horizontal
-plt.axhline(
-    y=umbral,
-    linestyle="--",
-    linewidth=2,
-    label=f"Umbral = {umbral:.0f} tCO2/día"
-)
-
-# Marcar solamente los días multados
-dias_multados = [
-    d + 1
-    for d in modelo.D
-    if multas[d] > 0.5
-]
-
-emisiones_multadas = [
-    emisiones[d - 1]
-    for d in dias_multados
-]
-
-if dias_multados:
-    plt.scatter(
-        dias_multados,
-        emisiones_multadas,
-        s=90,
-        marker="x",
-        linewidths=3,
-        label="Día con multa"
-    )
-
-plt.xticks(dias_grafico)
-plt.xlabel("Día")
-plt.ylabel("Emisiones [tCO2]")
-plt.title("Emisiones diarias y límite de emisiones")
-plt.grid(axis="y", linestyle=":")
-
-plt.legend()
-plt.tight_layout()
-
-plt.show()

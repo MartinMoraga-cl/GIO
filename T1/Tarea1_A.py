@@ -359,170 +359,107 @@ solver = pyo.SolverFactory("appsi_highs")
 resultado = solver.solve(modelo)
 
 print("Estado:", resultado.solver.termination_condition)
-#print("X =", pyo.value(modelo.X))
-#print("Y =", pyo.value(modelo.Y))
-#print("Z =", pyo.value(modelo.Z))
 print("Objetivo =", pyo.value(modelo.obj))
 
 
-print("Hora | Demanda | Gas_B1(X,U) | Gas_B2(X,U) | Diesel_Med_1 | Diesel_Med_2 | Peaker(X,U) | Importe | F_bat | S_bat")
-print("-" * 115)
+# Guardar resultados, gracias chati!
 
-for t in modelo.T:
-    print(
-        f"{t:4} | "
-        f"{pyo.value(modelo.demanda[t]):7.1f} | "
-        f"{pyo.value(modelo.X['Gas_Base_1',t]):6.0f},{pyo.value(modelo.U['Gas_Base_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Gas_Base_2',t]):6.0f},{pyo.value(modelo.U['Gas_Base_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_1',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_2',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Peaker',t]):6.0f},{pyo.value(modelo.U['Peaker',t]):3.0f} | "
-        f"{pyo.value(modelo.Z[t]):7.1f} | "
-        f"{pyo.value(modelo.F[t]):6.1f} | "
-        f"{pyo.value(modelo.S['Banco_Baterias_1',t]):6.1f}"
+import csv
+import os
+
+CARPETA_RESULTADOS = "resultados_variacion_a"
+os.makedirs(CARPETA_RESULTADOS, exist_ok=True)
+
+# Despacho + batería
+
+archivo_despacho = os.path.join(CARPETA_RESULTADOS, "despacho.csv")
+
+with open(archivo_despacho, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+
+    writer.writerow([
+        "hora",
+        "dia",
+        "hora_dia",
+        "demanda_mw",
+
+        "Gas_Base_1_mw",
+        "Gas_Base_2_mw",
+        "Diesel_Med_1_mw",
+        "Diesel_Med_2_mw",
+        "Peaker_mw",
+
+        "importacion_mw",
+        "flujo_bateria_mw",
+        "reserva_efectiva_mw",
+        "reserva_requerida_mw",
+
+        "Gas_Base_1_u",
+        "Gas_Base_2_u",
+        "Diesel_Med_1_u",
+        "Diesel_Med_2_u",
+        "Peaker_u",
+
+        "Banco_Baterias_1_carga_mw",
+        "Banco_Baterias_1_descarga_mw",
+        "Banco_Baterias_1_energia_mwh"
+    ])
+
+    for t in modelo.T:
+        capacidad_operativa = sum(
+            pyo.value(modelo.U[g, t]) * Pmax[g]
+            for g in generadores
+        )
+
+        reserva_efectiva = (
+            capacidad_operativa
+            - sum(pyo.value(modelo.X[g, t]) for g in generadores)
+            + (max_importe - pyo.value(modelo.Z[t]))
+        )
+
+        writer.writerow([
+            t,
+            t // 24 + 1,
+            t % 24,
+
+            pyo.value(modelo.demanda[t]),
+
+            pyo.value(modelo.X["Gas_Base_1", t]),
+            pyo.value(modelo.X["Gas_Base_2", t]),
+            pyo.value(modelo.X["Diesel_Med_1", t]),
+            pyo.value(modelo.X["Diesel_Med_2", t]),
+            pyo.value(modelo.X["Peaker", t]),
+
+            pyo.value(modelo.Z[t]),
+            pyo.value(modelo.F[t]),
+            reserva_efectiva,
+            pyo.value(modelo.reserva[t]),
+
+            pyo.value(modelo.U["Gas_Base_1", t]),
+            pyo.value(modelo.U["Gas_Base_2", t]),
+            pyo.value(modelo.U["Diesel_Med_1", t]),
+            pyo.value(modelo.U["Diesel_Med_2", t]),
+            pyo.value(modelo.U["Peaker", t]),
+
+            pyo.value(modelo.C["Banco_Baterias_1", t]),
+            pyo.value(modelo.D["Banco_Baterias_1", t]),
+            pyo.value(modelo.S["Banco_Baterias_1", t])
+        ])
+
+# Resumen
+
+archivo_resumen = os.path.join(CARPETA_RESULTADOS, "resumen.txt")
+
+with open(archivo_resumen, "w", encoding="utf-8") as f:
+    f.write(f"Estado: {resultado.solver.termination_condition}\n")
+    f.write(f"Objetivo: {pyo.value(modelo.obj)}\n")
+    f.write(
+        f"SOC inicial (MWh): "
+        f"{pyo.value(modelo.S0['Banco_Baterias_1'])}\n"
+    )
+    f.write(
+        f"SOC final (MWh): "
+        f"{pyo.value(modelo.S['Banco_Baterias_1', T-1])}\n"
     )
 
-
-print(
-    "Estado inicial:",
-    [pyo.value(modelo.S0[b]) for b in modelo.B]
-)
-
-print(
-    "Estado final:",
-    [pyo.value(modelo.S[b,T-1]) for b in modelo.B]
-)
-
-
-## Graficos, Chati es una bestia para graficar, es super tedioso lo que biene acá abojo.....
-
-import matplotlib.pyplot as plt
-
-# ============================================================
-# Grafico 1: Despacho y balance de potencia
-# ============================================================
-
-plt.figure(figsize=(14, 7))
-
-# Generadores
-for g in modelo.G:
-    plt.plot(
-        horas,
-        [pyo.value(modelo.X[g, t]) for t in modelo.T],
-        label=g
-    )
-
-# Importación
-plt.plot(
-    horas,
-    [pyo.value(modelo.Z[t]) for t in modelo.T],
-    label="Importación"
-)
-
-# Flujo neto de batería
-plt.plot(
-    horas,
-    [pyo.value(modelo.F[t]) for t in modelo.T],
-    label="Batería (F)"
-)
-
-# Demanda
-plt.plot(
-    horas,
-    [pyo.value(modelo.demanda[t]) for t in modelo.T],
-    label="Demanda"
-)
-
-# Capacidad instalada operativa
-capacidad_operativa = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        for g in modelo.G
-    )
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    capacidad_operativa,
-    label="Capacidad operativa"
-)
-
-# Reserva operativa efectiva
-reserva_efectiva = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        - pyo.value(modelo.X[g, t])
-        for g in modelo.G
-    )
-    + (max_importe - pyo.value(modelo.Z[t]))
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    reserva_efectiva,
-    label="Reserva efectiva"
-)
-
-# Reserva requerida
-plt.plot(
-    horas,
-    [pyo.value(modelo.reserva[t]) for t in modelo.T],
-    label="Reserva requerida"
-)
-
-plt.axhline(
-    0,
-    linewidth=0.8
-)
-
-plt.xlabel("Hora")
-plt.ylabel("Potencia [MW]")
-plt.title("Despacho de generación y operación de la batería")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-
-plt.show()
-
-
-# ============================================================
-# Grafico 2: Estado de carga de la batería
-# ============================================================
-
-plt.figure(figsize=(14, 5))
-
-SOC = [
-    pyo.value(modelo.S["Banco_Baterias_1", t])
-    for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    SOC,
-    label="Energía almacenada"
-)
-
-# Capacidad máxima
-plt.axhline(
-    pyo.value(modelo.Smax["Banco_Baterias_1"]),
-    linestyle="--",
-    label="Capacidad máxima"
-)
-
-# Estado inicial
-plt.axhline(
-    pyo.value(modelo.S0["Banco_Baterias_1"]),
-    linestyle=":",
-    label="Estado inicial"
-)
-
-plt.xlabel("Hora")
-plt.ylabel("Energía almacenada [MWh]")
-plt.title("Estado de carga de la batería")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-
-plt.show()
+print(f"Resultados guardados en: {CARPETA_RESULTADOS}/")
