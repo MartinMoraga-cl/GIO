@@ -252,14 +252,17 @@ def margen(modelo, t):      # La capacidad ociosa debe ser de almenos el 10% ext
     ) + (max_importe - modelo.Z[t]) >= modelo.reserva[t]    ################## <---------------- Falta modificar, creo....
 def limite_compra(modelo, t):
     return modelo.Z[t] <= max_importe
+
+
 def incremento_sup(modelo, g, t):
     if t == 0:
-        return modelo.R[g] >= modelo.X[g, t] - modelo.X0[g] 
-    return modelo.R[g] >= modelo.X[g, t] - modelo.X[g, t-1] 
+        return modelo.X[g, t] - modelo.X0[g] <= modelo.R[g] * modelo.U0[g] + modelo.Pmin[g] * (modelo.U[g, t] - modelo.U0[g])
+    return modelo.X[g, t] - modelo.X[g, t-1] <= modelo.R[g] * modelo.U[g, t-1] + modelo.Pmin[g] * (modelo.U[g, t] - modelo.U[g, t-1])
+
 def incremento_inf(modelo, g, t):
     if t == 0:
-        return -modelo.R[g] <= modelo.X[g, t] - modelo.X0[g]
-    return -modelo.R[g] <= modelo.X[g, t] - modelo.X[g, t-1]
+        return modelo.X0[g] - modelo.X[g, t] <= modelo.R[g] * modelo.U[g, t] + modelo.Pmin[g] * (modelo.U0[g] - modelo.U[g, t])
+    return modelo.X[g, t-1] - modelo.X[g, t] <= modelo.R[g] * modelo.U[g, t] + modelo.Pmin[g] * (modelo.U[g, t-1] - modelo.U[g, t])
 
 
 def flujo(modelo, t):   # F condensa el flujo neto de las baterias a la red
