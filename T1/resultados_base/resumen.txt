@@ -1,2 +1,2 @@
 Estado: optimal
-Objetivo: 1772517897.0
+Objetivo: 1776361861.0

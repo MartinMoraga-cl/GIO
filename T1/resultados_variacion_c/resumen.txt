@@ -1,4 +1,4 @@
 Estado: optimal
-Objetivo: 2255776353.642857
-Días sobre el umbral: 1
+Objetivo: 2264014061.3590226
+Días sobre el umbral: 2
 Multas totales: 100000000.0
