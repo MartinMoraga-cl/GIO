@@ -1,0 +1,6 @@
+Estado: optimal
+Objetivo: 1772584000.0
+Costo de corte: 100000 CLP/MWh
+Demanda total: 33962 MWh
+Demanda total recortada: 139.0 MWh
+Porcentaje semanal recortado: 0.4092809610741417%
