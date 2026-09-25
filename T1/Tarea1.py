@@ -29,9 +29,9 @@ reserva = [0] * T
 # demanda, importe y reserva salieron a iterar...
 for t in range(T):
     hora = t%24
-    demanda_neta[t]   = int(ppeak*gamma[t]*perfil_diario[hora]*(1+epsilon[t]))
-    precio_importe[t] = int((100000+90000*perfil_diario[hora])*(1+eta[t]))
-    reserva[t] = int(demanda_neta[t]*0.1)
+    demanda_neta[t]   = round(ppeak*gamma[t]*perfil_diario[hora]*(1+epsilon[t]))
+    precio_importe[t] = round((100000+90000*perfil_diario[hora])*(1+eta[t]))
+    reserva[t] = round(demanda_neta[t]*0.1)
 # ...Y volvieron evaluados :)
 
 #   Diccionarios, la forma "bonita"
