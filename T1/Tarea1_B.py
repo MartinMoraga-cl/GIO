@@ -14,7 +14,7 @@ perfil_diario = [   # estos corchetes son una lista... los otros son Diccionario
 
 ppeak = RNG.normal(loc=300, scale=0.05*300)
 epsilon = RNG.normal(loc=0, scale=0.03, size=T) 
-gamma = [0.8 if t > 120 else 1.0 for t in range(T)]
+gamma = [0.8 if t >= 120 else 1.0 for t in range(T)]
 
 demanda_neta = [0] * T # notacion WEONA que tiene el python..., se inicializa una lista de T 0s
 
