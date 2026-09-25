@@ -1,5 +1,3 @@
-# Ese codigo sigue siendo el original, hay que cambiarle el proposito....
-
 import pyomo.environ as pyo
 import numpy as np
 import math
@@ -33,7 +31,7 @@ for t in range(T):
     hora = t%24
     demanda_neta[t]   = int(ppeak*gamma[t]*perfil_diario[hora]*(1+epsilon[t]))
     precio_importe[t] = int((100000+90000*perfil_diario[hora])*(1+eta[t]))
-    reserva[t] = demanda_neta[t]*0.1
+    reserva[t] = int(demanda_neta[t]*0.1)
 # ...Y volvieron evaluados :)
 
 #   Diccionarios, la forma "bonita"
@@ -63,6 +61,11 @@ X0 = {
 U0 = {
     "Gas_Base_1": 1,"Gas_Base_2": 1, "Diesel_Med_1": 0, "Diesel_Med_2": 0, "Peaker": 0    
 }
+
+# Variacion B: respuesta de la demanda
+limite_horario = 0.20
+limite_semanal = 0.05
+coste_corte = 100000 # CLP/MWh. Cambiar para evaluar distintos valores.
 
 #   Solver de programacion lineal
 #   De acá en más se usan los nombres de la guia
@@ -141,6 +144,12 @@ modelo.Z = pyo.Var( # Potencia Comprada
     domain=pyo.NonNegativeReals
 )
 
+# Variacion B: demanda recortada en cada hora
+modelo.L = pyo.Var(
+    modelo.T,
+    domain=pyo.NonNegativeReals
+)
+
 ##  Funcion Objetivo
 
 def objetivo(modelo):
@@ -150,6 +159,9 @@ def objetivo(modelo):
         for t in modelo.T
     )+sum(
         modelo.precio_imp[t] * modelo.Z[t]
+        for t in modelo.T
+    )+sum(
+        coste_corte * modelo.L[t]
         for t in modelo.T
     )
 
@@ -166,11 +178,13 @@ def pot_min(modelo, g, t):  # Potencia Minima
 def pot_max(modelo, g, t):  # Potencia Maxima
     return modelo.X[g, t] <= modelo.Pmax[g] * modelo.U[g, t]
 
-def balance(modelo, t):     # Balance de energia - Oferta demanda
+# Variacion B: oferta + importacion + demanda recortada = demanda original
+def balance(modelo, t):
     return sum(
         modelo.X[g, t]
         for g in modelo.G
-    ) + modelo.Z[t] == modelo.demanda[t]
+    ) + modelo.Z[t] + modelo.L[t] == modelo.demanda[t]
+
 def partida(modelo, g, t):  # Relacion entre el estado (U) y el que tenga que encenderse (Y)
     if t == 0:
         return modelo.Y[g, t] >= modelo.U[g, t] - modelo.U0[g]  # Condicion inicial
@@ -182,6 +196,7 @@ def margen(modelo, t):      # La capacidad ociosa debe ser de almenos el 10% ext
     ) + (max_importe - modelo.Z[t]) >= modelo.reserva[t]
 def limite_compra(modelo, t):
     return modelo.Z[t] <= max_importe
+    
 def incremento_sup(modelo, g, t):
     if t == 0:
         return modelo.X[g, t] - modelo.X0[g] <= modelo.R[g] * modelo.U0[g] + modelo.Pmin[g] * (modelo.U[g, t] - modelo.U0[g])
@@ -191,6 +206,20 @@ def incremento_inf(modelo, g, t):
     if t == 0:
         return modelo.X0[g] - modelo.X[g, t] <= modelo.R[g] * modelo.U[g, t] + modelo.Pmin[g] * (modelo.U0[g] - modelo.U[g, t])
     return modelo.X[g, t-1] - modelo.X[g, t] <= modelo.R[g] * modelo.U[g, t] + modelo.Pmin[g] * (modelo.U[g, t-1] - modelo.U[g, t])
+
+# Variacion B: no se puede recortar mas del 20% de la demanda de cada hora
+def limite_corte_horario(modelo, t):
+    return modelo.L[t] <= limite_horario * modelo.demanda[t]
+
+# Variacion B: el recorte total semanal no puede superar el 5% de la demanda total
+def limite_corte_semanal(modelo):
+    return sum(
+        modelo.L[t]
+        for t in modelo.T
+    ) <= limite_semanal * sum(
+        modelo.demanda[t]
+        for t in modelo.T
+    )
 
 ### Ahora si pasan a ser restricciones aplicadas
 modelo.pmin = pyo.Constraint(
@@ -231,102 +260,134 @@ modelo.incremento_inf = pyo.Constraint(
     rule=incremento_inf
 )
 
+# Variacion B: restricciones de carga interrumpible
+modelo.limite_corte_horario = pyo.Constraint(
+    modelo.T,
+    rule=limite_corte_horario
+)
+modelo.limite_corte_semanal = pyo.Constraint(
+    rule=limite_corte_semanal
+)
+
 ##  Pedirle porfavor al PC que lo resuelva :)
 
 solver = pyo.SolverFactory("appsi_highs")
 resultado = solver.solve(modelo)
 
 print("Estado:", resultado.solver.termination_condition)
-#print("X =", pyo.value(modelo.X))
-#print("Y =", pyo.value(modelo.Y))
-#print("Z =", pyo.value(modelo.Z))
 print("Objetivo =", pyo.value(modelo.obj))
 
-
-print("Hora | Demanda | Gas_B1(X,U) | Gas_B2(X,U) | Diesel_Med_1 | Diesel_Med_2 | Peaker(X,U) | Importe (Z)")
-print("-" * 75)
-
-for t in modelo.T:
-    print(
-        f"{t:4} | "
-        f"{pyo.value(modelo.demanda[t]):7.1f} | "
-        f"{pyo.value(modelo.X['Gas_Base_1',t]):6.0f},{pyo.value(modelo.U['Gas_Base_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Gas_Base_2',t]):6.0f},{pyo.value(modelo.U['Gas_Base_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_1',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_1',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Diesel_Med_2',t]):6.0f},{pyo.value(modelo.U['Diesel_Med_2',t]):3.0f} | "
-        f"{pyo.value(modelo.X['Peaker',t]):6.0f},{pyo.value(modelo.U['Peaker',t]):3.0f} | "
-        f"{pyo.value(modelo.Z[t]):11.1f}"
-    )
-
-
-
-
-
-## Graficos, graciass Chati
-
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(14, 7))
-
-# Generadores
-for g in modelo.G:
-    plt.plot(
-        horas,
-        [pyo.value(modelo.X[g, t]) for t in modelo.T],
-        label=g
-    )
-
-# Importación
-plt.plot(
-    horas,
-    [pyo.value(modelo.Z[t]) for t in modelo.T],
-    label="Importación"
-)
-
-# Demanda
-plt.plot(
-    horas,
-    [pyo.value(modelo.demanda[t]) for t in modelo.T],
-    label="Demanda"
-)
-
-# Capacidad instalada operativa
-capacidad_operativa = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        for g in modelo.G
-    )
+# Resultados adicionales de la Variacion B
+corte_total = sum(
+    pyo.value(modelo.L[t])
     for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    capacidad_operativa,
-    label="Capacidad operativa"
 )
 
-# Reserva operativa efectiva
-reserva_efectiva = [
-    sum(
-        pyo.value(modelo.Pmax[g]) * pyo.value(modelo.U[g, t])
-        - pyo.value(modelo.X[g, t])
-        for g in modelo.G
-    )
-    + (max_importe - pyo.value(modelo.Z[t]))
+demanda_total = sum(
+    pyo.value(modelo.demanda[t])
     for t in modelo.T
-]
-
-plt.plot(
-    horas,
-    reserva_efectiva,
-    label="Reserva efectiva"
 )
 
-plt.xlabel("Hora")
-plt.ylabel("Potencia [MW]")
-plt.title("Despacho de generación durante la semana")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
+porcentaje_corte = 100 * corte_total / demanda_total
 
-plt.show()
+print("Costo de corte =", coste_corte, "CLP/MWh")
+print("Demanda total =", demanda_total, "MWh")
+print("Demanda total recortada =", corte_total, "MWh")
+print("Porcentaje semanal recortado =", porcentaje_corte, "%")
+
+# Guardar resultados
+
+import csv
+import os
+
+CARPETA_RESULTADOS = "resultados_variacion_B"
+os.makedirs(CARPETA_RESULTADOS, exist_ok=True)
+
+# Despacho horario
+
+archivo_despacho = os.path.join(CARPETA_RESULTADOS, "despacho_variacion_B.csv")
+
+with open(archivo_despacho, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+
+    writer.writerow([
+        "hora",
+        "dia",
+        "hora_dia",
+        "demanda_mw",
+        "demanda_recortada_mw",
+        "demanda_servida_mw",
+
+        "Gas_Base_1_mw",
+        "Gas_Base_2_mw",
+        "Diesel_Med_1_mw",
+        "Diesel_Med_2_mw",
+        "Peaker_mw",
+
+        "importacion_mw",
+        "capacidad_operativa_mw",
+        "reserva_efectiva_mw",
+        "reserva_requerida_mw",
+
+        "Gas_Base_1_u",
+        "Gas_Base_2_u",
+        "Diesel_Med_1_u",
+        "Diesel_Med_2_u",
+        "Peaker_u"
+    ])
+
+    for t in modelo.T:
+        capacidad_operativa = sum(
+            pyo.value(modelo.U[g, t]) * Pmax[g]
+            for g in generadores
+        )
+
+        reserva_efectiva = (
+            capacidad_operativa
+            - sum(pyo.value(modelo.X[g, t]) for g in generadores)
+            + (max_importe - pyo.value(modelo.Z[t]))
+        )
+
+        demanda_recortada = pyo.value(modelo.L[t])
+        demanda_servida = pyo.value(modelo.demanda[t]) - demanda_recortada
+
+        writer.writerow([
+            t,
+            t // 24 + 1,
+            t % 24,
+
+            pyo.value(modelo.demanda[t]),
+            demanda_recortada,
+            demanda_servida,
+
+            pyo.value(modelo.X["Gas_Base_1", t]),
+            pyo.value(modelo.X["Gas_Base_2", t]),
+            pyo.value(modelo.X["Diesel_Med_1", t]),
+            pyo.value(modelo.X["Diesel_Med_2", t]),
+            pyo.value(modelo.X["Peaker", t]),
+
+            pyo.value(modelo.Z[t]),
+            capacidad_operativa,
+            reserva_efectiva,
+            pyo.value(modelo.reserva[t]),
+
+            pyo.value(modelo.U["Gas_Base_1", t]),
+            pyo.value(modelo.U["Gas_Base_2", t]),
+            pyo.value(modelo.U["Diesel_Med_1", t]),
+            pyo.value(modelo.U["Diesel_Med_2", t]),
+            pyo.value(modelo.U["Peaker", t])
+        ])
+
+# Resumen
+
+archivo_resumen = os.path.join(CARPETA_RESULTADOS, "resumen_variacion_B.txt")
+
+with open(archivo_resumen, "w", encoding="utf-8") as f:
+    f.write(f"Estado: {resultado.solver.termination_condition}\n")
+    f.write(f"Objetivo: {pyo.value(modelo.obj)}\n")
+    f.write(f"Costo de corte: {coste_corte} CLP/MWh\n")
+    f.write(f"Demanda total: {demanda_total} MWh\n")
+    f.write(f"Demanda total recortada: {corte_total} MWh\n")
+    f.write(f"Porcentaje semanal recortado: {porcentaje_corte}%\n")
+
+print(f"Resultados guardados en: {CARPETA_RESULTADOS}/")
