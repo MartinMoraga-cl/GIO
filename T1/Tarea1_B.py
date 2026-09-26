@@ -333,7 +333,13 @@ with open(archivo_despacho, "w", newline="", encoding="utf-8") as f:
         "Gas_Base_2_u",
         "Diesel_Med_1_u",
         "Diesel_Med_2_u",
-        "Peaker_u"
+        "Peaker_u",
+
+        "Gas_Base_1_y",
+        "Gas_Base_2_y",
+        "Diesel_Med_1_y",
+        "Diesel_Med_2_y",
+        "Peaker_y"
     ])
 
     for t in modelo.T:
@@ -375,7 +381,13 @@ with open(archivo_despacho, "w", newline="", encoding="utf-8") as f:
             pyo.value(modelo.U["Gas_Base_2", t]),
             pyo.value(modelo.U["Diesel_Med_1", t]),
             pyo.value(modelo.U["Diesel_Med_2", t]),
-            pyo.value(modelo.U["Peaker", t])
+            pyo.value(modelo.U["Peaker", t]),
+
+            pyo.value(modelo.Y["Gas_Base_1", t]),
+            pyo.value(modelo.Y["Gas_Base_2", t]),
+            pyo.value(modelo.Y["Diesel_Med_1", t]),
+            pyo.value(modelo.Y["Diesel_Med_2", t]),
+            pyo.value(modelo.Y["Peaker", t])
         ])
 
 # Resumen
