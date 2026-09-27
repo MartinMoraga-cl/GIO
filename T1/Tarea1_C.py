@@ -69,7 +69,7 @@ factor_emision = { # tCO2/MWh
 }
 
 umbral_diario = 1500 # tCO2/diarias
-monto_multa = 100000000  # supongo que todo lo monetario está en clp....
+monto_multa = 1000000000  # supongo que todo lo monetario está en clp....
 
 dias = range(7)
 

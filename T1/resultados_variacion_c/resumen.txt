@@ -1,4 +1,6 @@
 Estado: optimal
-Objetivo: 2264014061.3590226
-Días sobre el umbral: 2
-Multas totales: 100000000.0
+FO (Costo Total): 2,264,014,061.36 CLP
+F (Costo Fijo Multa): 100,000,000 CLP
+Días sobre el umbral: 1
+Multas totales: 100,000,000.00 CLP
+Emisiones totales: 10,977.71 tCO2
