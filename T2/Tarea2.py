@@ -6,8 +6,8 @@ n_max = 18 #18
 num_instancias = 100
 
 # Almacenamiento de GAPs, prealocacion de memoria
-gaps_caso1 = np.zeros((n_max, num_instancias))  # caso diagonal = 1
-gaps_caso2 = np.zeros((n_max, num_instancias))  # caso diagonal = n^2
+gaps_caso1 = np.zeros((n_max, num_instancias))
+gaps_caso2 = np.zeros((n_max, num_instancias))
 optimos_caso1 = np.zeros((n_max, num_instancias))
 optimos_caso2 = np.zeros((n_max, num_instancias))
 
@@ -38,7 +38,7 @@ for n in range(1, n_max + 1):   # Recorrido de las dimensiones
 
         # Evaluar la funcion objetivo para todas las combinaciones para Q_base, pero expresado como tensor, de esta manera se usa la potencia de numpy en lugar
         # de ciclos for anidados que no estan optimizados, esto es importante dado que la cantidad de combinaciones crece exponencialmente
-        # ademas, numpy implementa paralelismo en sus ...[funciones?, como se podria decir...., porque en mio pc usa todos los trheatsa disponibles]...
+        # ademas, numpy implementa paralelismo en este tipo de operaciones
         valores = np.einsum(
             "ij,ij->i",
             X_comb @ Q_base,
