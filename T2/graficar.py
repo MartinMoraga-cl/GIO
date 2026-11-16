@@ -69,7 +69,7 @@ def graficar_gap(n, promedio, desviacion, titulo, archivo):
 
     plt.savefig(archivo, dpi=300, bbox_inches="tight")
     y_max = max(superior)
-    plt.ylim(-0.1 * y_max, None)
+    #plt.ylim(-0.1 * y_max, None)   # Fuerza un margen del 10%...
     plt.show()
     plt.close()
 
