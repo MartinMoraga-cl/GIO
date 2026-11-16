@@ -2,14 +2,16 @@ import numpy as np
 import csv
 
 # Parametros del experimento
-n_max = 18 #18
-num_instancias = 100
+n_max = 18 #25
+num_instancias = 100 #500
 
 # Almacenamiento de GAPs, prealocacion de memoria
 gaps_caso1 = np.zeros((n_max, num_instancias))
 gaps_caso2 = np.zeros((n_max, num_instancias))
 optimos_caso1 = np.zeros((n_max, num_instancias))
 optimos_caso2 = np.zeros((n_max, num_instancias))
+
+resultados_individuales = []
 
 # Generador aleatorio
 rng = np.random.default_rng(69) # Semilla fija para tener resultados reproducibles
@@ -61,6 +63,7 @@ for n in range(1, n_max + 1):   # Recorrido de las dimensiones
         cota_dual1 = n * (lambda_min + m1) # el autovalor minimo de la base está m1 por debajo, dado que posee la diagonal en cero
 
         gaps_caso1[n - 1, inst] = ((p_star1 - cota_dual1) / abs(p_star1))   # formula indicada en la tarea
+        resultados_individuales.append([n, inst + 1, "m=1", m1, p_star1, lambda_min + m1, cota_dual1, gaps_caso1[n - 1, inst]])
 
         # --- Caso 2: m = n^2 ---
         m2 = n**2
@@ -70,6 +73,7 @@ for n in range(1, n_max + 1):   # Recorrido de las dimensiones
         cota_dual2 = n * (lambda_min + m2) # el autovalor minimo de la base está m2 por debajo, dado que posee la diagonal en cero
 
         gaps_caso2[n - 1, inst] = ((p_star2 - cota_dual2) / abs(p_star2))   # formula indicada en la tarea
+        resultados_individuales.append([n, inst + 1, "m=n^2", m2, p_star2, lambda_min + m2, cota_dual2, gaps_caso2[n - 1, inst]])
 
     print(f"  Completado n = {n}")
 
@@ -137,6 +141,25 @@ with open("T2_resultados.csv", "w", newline="") as archivo:
             worst_p2[i]
         ])
 
+
+# Exportar resultados individuales
+
+with open("T2_instancias.csv", "w", newline="") as archivo:
+
+    writer = csv.writer(archivo)
+
+    writer.writerow([
+        "n",
+        "instancia",
+        "caso",
+        "m",
+        "p_star",
+        "lambda_min_Q",
+        "cota_inferior",
+        "GAP"
+    ])
+
+    writer.writerows(resultados_individuales)
 
 print("\nExperimento finalizado.")
 print("Archivos generados:")
