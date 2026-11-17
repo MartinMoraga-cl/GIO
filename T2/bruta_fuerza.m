@@ -1,5 +1,5 @@
 n = 14; % no pasarse de 14...
-m = n*n;
+m = 1;
 
 Q = m*eye(n);
 for i=1:n
